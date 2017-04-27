@@ -3,7 +3,7 @@ package tp.utn.demo.domain;
 import tp.utn.ann.Column;
 import tp.utn.ann.Id;
 import tp.utn.ann.Table;
-@Table(name="persona")
+@Table(name="persona", alias="p")
 public class Persona
 {
 	@Id(strategy=Id.IDENTITY)

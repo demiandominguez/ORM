@@ -6,7 +6,7 @@ import tp.utn.ann.Column;
 import tp.utn.ann.Id;
 import tp.utn.ann.Relation;
 import tp.utn.ann.Table;
-@Table(name="direccion")
+@Table(name="direccion", alias="d")
 public class Direccion
 {
 	@Id(strategy=Id.IDENTITY)
@@ -18,6 +18,9 @@ public class Direccion
 
 	@Column(name="numero")
 	private int numero;
+	
+	@Column(name="id_tipovivienda")
+	private TipoVivienda vivienda;
 	
 	@Relation(type=Persona.class,att="direccion")
 	private Collection<Persona> personas;

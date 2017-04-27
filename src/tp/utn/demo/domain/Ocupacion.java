@@ -4,7 +4,7 @@ import tp.utn.ann.Column;
 import tp.utn.ann.Id;
 import tp.utn.ann.Table;
 
-@Table(name="ocupacion")
+@Table(name="ocupacion", alias="ocup")
 public class Ocupacion
 {
 	@Id(strategy=Id.IDENTITY)
