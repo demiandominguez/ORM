@@ -16,7 +16,7 @@ public class Persona
 	@Column(name="id_direccion")
 	public Direccion direccion;
 	
-	@Column(name="id_ocupacion")
+	@Column(name="id_ocupacion", fetchType = Column.LAZY)
 	public Ocupacion ocupacion;
 
 	public Integer getIdPersona()

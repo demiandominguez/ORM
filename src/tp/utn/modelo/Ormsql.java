@@ -64,4 +64,12 @@ public class Ormsql {
 	public static String punto(){
 		return ".";
 	}
+	
+	public static String $(){
+		return "@";
+	}
+	
+	public static String incognita(){
+		return "?";
+	}
 }

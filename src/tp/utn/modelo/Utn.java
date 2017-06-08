@@ -1,18 +1,24 @@
 package tp.utn.modelo;
 
 import java.lang.annotation.Annotation;
-import java.lang.reflect.AnnotatedParameterizedType;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.lang.reflect.Type;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Collection;
 import java.util.List;
-import java.util.stream.Collectors;
 
+import net.sf.cglib.proxy.Enhancer;
+import net.sf.cglib.proxy.MethodInterceptor;
+import net.sf.cglib.proxy.MethodProxy;
+import tp.utn.ConnectDatabase;
 import tp.utn.ann.Column;
 import tp.utn.ann.Id;
 import tp.utn.ann.Table;
-import tp.utn.demo.domain.Persona;
 
 public class Utn
 {
@@ -88,7 +94,8 @@ public class Utn
 						Class<T> otraTabla = (Class<T>)atributo.getType();
 						Annotation anotacionTablaOtraTabla = otraTabla.getAnnotation(Table.class);
 						if(anotacionTablaOtraTabla == null) //no es otro objeto de dominio
-							{listaAtributos.add(aliasTabla + Ormsql.punto() + ((Column)anotacion).name());}
+							{listaAtributos.add(aliasTabla + Ormsql.punto() + ((Column)anotacion).name() + Ormsql.espacio() + Ormsql.as() + Ormsql.espacio()
+									+ aliasTabla + Ormsql.underscore() + ((Column)anotacion).name() );}
 						else{ 													//es otro objeto de dominio
 							//Llamo recursivamente a la funcion con la clase del objeto de dominio
 							String aliasOtraTabla; 
@@ -98,9 +105,6 @@ public class Utn
 							buscarAtributos(otraTabla, aliasOtraTabla, listaAtributos);
 						}	
 					}
-				}
-				else{//si es @Relation
-					
 				}
 			}//Fin recorrido anotaciones
 		}//Fin recorrido atributos
@@ -131,6 +135,7 @@ public class Utn
 		listaJoin = buscarJoin(dtoClass, aliasTabla, listaJoin);		
 		
 		from += listaJoin.stream().reduce("", (a, b) -> a +  Ormsql.tab() + b + Ormsql.salto());
+		from = from.substring(0,from.length()-1);
 		return from;
 	}
 	
@@ -148,7 +153,7 @@ public class Utn
 							//es otro objeto de dominio
 							String nombreOtraTabla;
 							String aliasOtraTabla; 
-							String idOtraTabla = buscarIdTabla(otraTabla);
+							String idOtraTabla = (buscarIdTabla(otraTabla).getAnnotation(Column.class)).name();
 							if ((((Table)anotacionTablaOtraTabla).alias()).length()>0){
 								aliasOtraTabla = ((Table)anotacionTablaOtraTabla).alias();
 								nombreOtraTabla = ((Table)anotacionTablaOtraTabla).name()
@@ -173,23 +178,19 @@ public class Utn
 						}
 					}
 				}
-				else{//si es @Relation
-						
-				}
 			}//Fin recorrido anotaciones
 		}//Fin recorrido atributos
 		
 		return listaJoin;
 	}
 	
-	private static <T> String buscarIdTabla(Class<T> dtoClass){
+	private static <T> Field buscarIdTabla(Class<T> dtoClass){
 		String id = "";
 		Field[] atributosClase = dtoClass.getDeclaredFields();
 		for(Field atributo:atributosClase){
 			Annotation[] anotacionesAtributo = atributo.getDeclaredAnnotations();
 			if(atributo.isAnnotationPresent(Id.class)){
-				Annotation  anotacionColumnaId = atributo.getAnnotation(Column.class);
-				return ((Column)anotacionColumnaId).name();
+				return atributo;
 			}
 		}//Fin recorrido atributos
 		return null; //tengo que ver de hacer un metodo que valide si tiene id, si tiene el @table, etc para usarlo en _query y aca
@@ -202,30 +203,252 @@ public class Utn
 		return Ormsql.salto()+Ormsql.where()+Ormsql.salto()+Ormsql.tab()+xql;
 	}
 	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-	
-	
-	
 	// Invoca a: _query para obtener el SQL que se debe ejecutar
 	// Retorna: una lista de objetos de tipo T
-	public static <T> List<T> query(Connection con, Class<T> dtoClass, String xql, Object... args)
+	public static <T> List<T> query(Connection con, Class<T> dtoClass, String xql, Object... args) throws Exception
 	{
-		return null;
+		String xql_mapped;
+		try
+		{
+			xql_mapped=mapXql(dtoClass, xql,args);
+		}
+		catch(Exception e)
+		{
+			throw new Exception(e.getMessage());
+		}
+		String consulta = _query(dtoClass,xql_mapped);
+		PreparedStatement pstmt = null;
+		ResultSet result = null;
+		List<T> listaResultados = new ArrayList<T>();
+	    try {
+	    	pstmt = con.prepareStatement(consulta);
+	    	result = pstmt.executeQuery();
+	    	result.next();
+	    	return (List<T>)populate(result, dtoClass);
+	    } catch (Exception e) {
+	    	throw e;
+	    }	
+	    finally {
+	    	if( result!=null ) result.close(); 
+	    	if( pstmt!=null ) pstmt.close();
+		}
 	}
+	
+	private static <T> Collection<T> populate(ResultSet result, Class<T> dtoClass) throws Exception
+	{
+		List<T> resultSetHidratado = new ArrayList<>();
+		try
+		{
+			do{
+				resultSetHidratado.add((T)hidrate(result,dtoClass));
+			}while (result.next());
+			return resultSetHidratado;
+		}
+		catch(SQLException e)
+		{
+			throw e;
+		}
+	}
+	
+	public static <T> T hidrate (ResultSet result, Class<T> dtoClass) throws Exception
+	{
+		Enhancer enhancer = new Enhancer();
+		enhancer.setSuperclass(dtoClass);
+		enhancer.setCallback(new MethodInterceptor() {
+			@Override
+			public Object intercept(Object obj, Method metodo, Object[] args, MethodProxy proxy) throws Throwable 
+			{
+				Type tipo = metodo.getReturnType();
+				if(tipo!=null){
+					Field[] atributos = metodo.getDeclaringClass().getDeclaredFields();
+					for(Field atributo:atributos){
+						if(atributo.getType().equals(tipo)){
+							if(atributo.isAnnotationPresent(Column.class))
+							{
+								Annotation anotacion = atributo.getAnnotation(Column.class);
+								if(((Column)anotacion).fetchType() == Column.LAZY && atributo != null){
+									ConnectDatabase conector = new ConnectDatabase();
+									Connection con = conector.getConnection();
+									String xql = "";
+									xql = Ormsql.$() + (((Class<T>)tipo).getAnnotation(Table.class)).name() + Ormsql.punto() + Utn.buscarIdTabla((Class<T>)tipo).getName()
+											+ Ormsql.igual() + Ormsql.incognita();
+									Field atrGet = Utn.buscarIdTabla((Class<T>)metodo.getDeclaringClass());
+									//falta sacar el atributo del obj
+									Method metodoGet = ((Class<T>)metodo.getDeclaringClass()).getDeclaredMethod("get" + atrGet.getName().substring(0,1).toUpperCase() + atrGet.getName().substring(1));
+									return Utn.query(con,(Class<T>)tipo,xql,metodoGet.invoke(obj, null)).get(0);
+								}
+							}
+							else{
+								if(atributo.isAnnotationPresent(tp.utn.ann.Relation.class)){
+									System.out.println("es relation");
+									Annotation anotacion = atributo.getAnnotation(tp.utn.ann.Relation.class);
+									
+								}
+							}
+						}
+				    }	
+				}
+				return proxy.invokeSuper(obj, args);
+			}
+		});
+		T newT = (T) enhancer.create();
+		//estoy considerando siempre que los metodos get y set siguen la form set/getCampo por que no se como se podria hacer de otra forma.
+		//capaz se puede buscar el metodo que tenga returnType del tipo del atributo que quiero settear pero si hay otro etodo que tenga el mismo tipo me traeria el primero
+		//o podria no tener un tipo de retorno
+		String nombreTabla = getNombreOAlias(dtoClass);
+		Field[] atributosClase = dtoClass.getDeclaredFields();
+		for(Field atributo:atributosClase){
+			try{
+				Annotation anotacion = atributo.getAnnotation(Column.class);
+				if (anotacion != null &&((Column)anotacion).fetchType() == Column.EAGER){ //Si es Eager lo busco, si es Lazy no
+					Method metodo = ((Class<T>)dtoClass).getDeclaredMethod("set" + atributo.getName().substring(0,1).toUpperCase() + atributo.getName().substring(1),atributo.getType());
+					Class<T> otraTabla = (Class<T>)atributo.getType();
+					Annotation anotacionTablaOtraTabla = otraTabla.getAnnotation(Table.class);
+					if(anotacionTablaOtraTabla != null){
+						//si es un campo compuesto
+						metodo.invoke(newT, hidrate(result,otraTabla));
+						//hay un problema al sacar los valores del result set: buscar forma de sacar los valores usando el nombre del campo que lo saco de la anotation
+					}
+					else{
+						//si es un campo simple ejemplo persona.id, persona.nombre
+						metodo.invoke(newT,result.getObject( ( nombreTabla + Ormsql.underscore() + (atributo.getAnnotation(Column.class)).name().toUpperCase() ), atributo.getType() ));
+					}
+				}
+			}
+			catch (NoSuchMethodException | SecurityException e) {
+	            e.printStackTrace();
+	        } catch (IllegalArgumentException e) {
+	            e.printStackTrace();
+	        }
+		}//Fin recorrido atributos
+		return newT;
+	}
+
+	public static <T> String mapXql(Class<T> dtoClass, String xql, Object... args) throws Exception
+	{
+		int contadorIncognitas = 0;
+		//busco el simbolo pesos en el xql, cuando lo encuentro me guardo el index 
+		int pos$ = xql.indexOf(Ormsql.$());
+		if (pos$ == -1){
+			return xql;
+		}
+		
+		do{
+		String nombreAtributo = "";
+		int finAtributo = getPosFinAtributo(pos$, xql); //busco el proximo caracter especial
+		if((pos$ + 1 == finAtributo)|| (finAtributo == -1))
+		{
+			throw new Exception("XQL mal armado");	//puso un $ sin poner que variable hay que reempazar o puso $.algo
+		}
+		if (xql.substring(pos$ + 1,finAtributo).compareToIgnoreCase(dtoClass.getSimpleName()) == 0){
+			//aca es $nombreclase.nombreatributo
+			pos$ = finAtributo + 1;
+			finAtributo =  getPosFinAtributo(pos$, xql);
+			if((finAtributo == -1)||(finAtributo == (pos$ + 1))){
+				throw new Exception("XQL mal armado");
+			}
+			try
+			{
+				xql = reemplazarNombreAributo(dtoClass, pos$, finAtributo, xql);
+			}
+			catch(Exception e)
+			{
+				e.printStackTrace();
+				throw new RuntimeException(e);
+			}
+		}
+		else{
+			//aca es nombreatributo
+			finAtributo =  getPosFinAtributo(pos$, xql);
+			if((finAtributo == -1)||(finAtributo == (pos$ + 1))){
+				throw new Exception("XQL mal armado");
+			}
+			try
+			{
+				xql = reemplazarNombreAributo(dtoClass, pos$ + 1, finAtributo, xql);
+			}
+			catch(Exception e)
+			{
+				e.printStackTrace();
+				throw new RuntimeException(e);
+			}
+		}
+		//siempre que encuentro un atributo me fijo si hay un ?, si hay reemplazo por el valor de args correspondiente
+		
+		if(xql.indexOf(Ormsql.incognita()) != -1 ){
+			if(args.length > contadorIncognitas){
+				int posIncognita = xql.indexOf(Ormsql.incognita());
+				xql = xql.substring(0,posIncognita) + args[contadorIncognitas] + xql.substring(posIncognita + 1);
+				contadorIncognitas++;
+			}
+			else{
+				throw new Exception("Cantidad de parámetros insuficiente");
+			}
+		}
+		pos$ = xql.indexOf(Ormsql.$());
+		} while (pos$ != -1);
+		return xql;
+	}
+
+
+	
+	private static <T> String getNombreOAlias(Class<T> dtoClass)
+	{
+		Annotation esTabla= dtoClass.getAnnotation(Table.class);
+		try{
+			if (esTabla == null && !(esTabla instanceof Table)){
+				throw new Exception("Clase no mapeada");
+			}
+		}
+		catch (Exception e){
+			return e.getMessage(); //Agregar mejores excepciones
+		}
+		if ((((Table)esTabla).alias()).length() > 0){return ((Table)esTabla).alias();}else{return ((Table)esTabla).name();}
+	}
+
+	private static int getPosFinAtributo(int pos$, String xql)
+	{
+		//buscar la posicion de fin del atributo donde este el primer espacio < > = o espacio_blanco
+		List<Integer> posiciones = new ArrayList<>();
+		if(xql.indexOf(".", pos$) != -1 ) posiciones.add(xql.indexOf(".", pos$));
+		if(xql.indexOf("=", pos$) != -1 ) posiciones.add(xql.indexOf("=", pos$));
+		if(xql.indexOf("<", pos$) != -1 ) posiciones.add(xql.indexOf("<", pos$));
+		if(xql.indexOf(">", pos$) != -1 ) posiciones.add(xql.indexOf(">", pos$));
+		if(xql.indexOf(" ", pos$) != -1 ) posiciones.add(xql.indexOf(" ", pos$));
+		if(posiciones.isEmpty()){return -1;}
+		else {return posiciones.stream().mapToInt(i -> i).min().getAsInt();}
+	}
+
+	private static <T> String reemplazarNombreAributo(Class<T> dtoClass, int pos$, int finAtributo, String xql) throws Exception
+	{
+		String substring =  xql.substring(pos$, finAtributo);
+		Field[] atributosClase = dtoClass.getDeclaredFields();
+		for(Field atributo:atributosClase){
+			if(atributo.getName().equals(substring))
+			{
+				if(atributo.isAnnotationPresent(Column.class)){
+					Class<T> otraTabla = (Class<T>)atributo.getType();
+					Annotation anotacionTablaOtraTabla = otraTabla.getAnnotation(Table.class);
+					if(anotacionTablaOtraTabla != null){ 
+						//es persona.direccion.id o direccion.id
+						return reemplazarNombreAributo(otraTabla, finAtributo + 1, getPosFinAtributo(finAtributo + 1,xql), xql);
+					}
+					else{
+						//es atributo de persona
+						Annotation[] anotacionesAtributo = atributo.getDeclaredAnnotations();
+						Annotation  anotacionColumna = atributo.getAnnotation(Column.class);
+						return xql.substring(0,xql.indexOf(Ormsql.$())) + getNombreOAlias(dtoClass) + Ormsql.punto() + ((Column)anotacionColumna).name() + xql.substring(finAtributo); 
+						//esto no anda xql.replace(cadenaAReemplazar, nombreAtributo); String cadenaAReemplazar = xql.substring(xql.indexOf(Ormsql.$()),finAtributo);
+					}
+				}
+			}
+		}//Fin recorrido atributos
+		throw new Exception("Atributo No Existente");
+	}
+
+	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	
 	// Retorna: una fila identificada por id o null si no existe
 	// Invoca a: query

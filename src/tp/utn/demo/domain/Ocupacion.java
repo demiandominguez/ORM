@@ -14,7 +14,7 @@ public class Ocupacion
 	@Column(name="descripcion")
 	private String descripcion;
 	
-	@Column(name="id_tipoocupacion")
+	@Column(name="id_tipo_ocupacion")
 	public TipoOcupacion tipoOcupacion;
 	
 	public Integer getIdOcupacion()
@@ -50,7 +50,7 @@ public class Ocupacion
 	@Override
 	public String toString()
 	{
-		return getDescripcion();
+		return "Ocupacion [idOcupacion="+idOcupacion+", descripcion="+descripcion+", tipo_ocupacion="+tipoOcupacion+"]";
 	}
 
 	@Override
