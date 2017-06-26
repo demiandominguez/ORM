@@ -1,12 +1,13 @@
 package tp.utn.demo.domain;
 
-import java.util.Collection;
+import java.util.List;
 
 import tp.utn.ann.Column;
 import tp.utn.ann.Id;
 import tp.utn.ann.Relation;
 import tp.utn.ann.Table;
-@Table(name="direccion", alias="dire")
+
+@Table(name="direccion")
 public class Direccion
 {
 	@Id(strategy=Id.IDENTITY)
@@ -17,20 +18,17 @@ public class Direccion
 	private String calle;
 
 	@Column(name="numero")
-	private int numero;
+	private Integer numero;
 	
-	@Column(name="id_tipo_vivienda")
-	private TipoVivienda vivienda;
-	
-	@Relation(type=Persona.class,att="direccion")
-	private Collection<Persona> personas;
+	@Relation(mappedBy="direccion", type=PersonaDireccion.class)
+	private List<PersonaDireccion> personas;
 
-	public Collection<Persona> getPersonas()
+	public List<PersonaDireccion> getPersonas()
 	{
 		return personas;
 	}
 
-	public void setPersonas(Collection<Persona> personas)
+	public void setPersonas(List<PersonaDireccion> personas)
 	{
 		this.personas=personas;
 	}
@@ -55,41 +53,29 @@ public class Direccion
 		this.calle=calle;
 	}
 
-	public int getNumero()
+	public Integer getNumero()
 	{
 		return numero;
 	}
 
-	public void setNumero(int numero)
+	public void setNumero(Integer numero)
 	{
 		this.numero=numero;
-	}
-	
-	
-	public void setVivienda(TipoVivienda vivienda)
-	{
-		this.vivienda=vivienda;
-	}
-	
-	public TipoVivienda getVivienda()
-	{
-		return vivienda;
 	}
 
 	@Override
 	public String toString()
 	{
-		return "Direccion [idDireccion="+idDireccion+", calle="+calle+", numero="+numero+", vivienda="+vivienda+"]";
+		return getCalle()+" "+getNumero();
 	}
 
 	@Override
 	public boolean equals(Object obj)
 	{
-		Direccion o=(Direccion)obj;
-		boolean ok = idDireccion==o.getIdDireccion()&& numero==o.getNumero();
-		String sCalle=calle!=null?calle:"null";
-		String sOCalle=o.getCalle()!=null?o.getCalle():"null";
-		return ok&&sCalle.equals(sOCalle);
+		Direccion other=(Direccion)obj;
+		return other.getIdDireccion().equals(getIdDireccion())
+			&& other.getCalle().equals(getCalle())
+			&& other.getNumero().equals(getNumero());
 	}
 
 

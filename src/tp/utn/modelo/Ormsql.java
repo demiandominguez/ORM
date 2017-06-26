@@ -72,4 +72,36 @@ public class Ormsql {
 	public static String incognita(){
 		return "?";
 	}
+	
+	public static String parentesisIzq (){
+		return "(";
+	}
+	
+	public static String parentesisDer(){
+		return ")";
+	}
+	
+	public static String update(){
+		return "UPDATE";
+	}
+	
+	public static String set(){
+		return "SET";
+	}
+	
+	public static String insert(){
+		return "INSERT INTO";
+	}
+	
+	public static String values(){
+		return "VALUES";
+	}
+	
+	public static String comillas(){
+		return "'";
+	}
+	
+	public static String delete(){
+		return "DELETE";
+	}
 }

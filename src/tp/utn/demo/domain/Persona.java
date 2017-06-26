@@ -1,23 +1,37 @@
 package tp.utn.demo.domain;
 
+import java.util.List;
+
 import tp.utn.ann.Column;
 import tp.utn.ann.Id;
+import tp.utn.ann.Relation;
 import tp.utn.ann.Table;
-@Table(name="persona", alias="p")
+
+@Table(name="persona")
 public class Persona
 {
 	@Id(strategy=Id.IDENTITY)
 	@Column(name="id_persona")
 	private Integer idPersona;
-	
+
 	@Column(name="nombre")
 	private String nombre;
-		
-	@Column(name="id_direccion")
-	public Direccion direccion;
-	
-	@Column(name="id_ocupacion", fetchType = Column.LAZY)
+
+	@Column(fetchType=Column.LAZY, name="id_ocupacion")
 	public Ocupacion ocupacion;
+
+	@Relation(mappedBy="persona", type=PersonaDireccion.class)
+	public List<PersonaDireccion> direcciones;
+
+	public List<PersonaDireccion> getDirecciones()
+	{
+		return direcciones;
+	}
+
+	public void setDirecciones(List<PersonaDireccion> direcciones)
+	{
+		this.direcciones=direcciones;
+	}
 
 	public Integer getIdPersona()
 	{
@@ -39,16 +53,6 @@ public class Persona
 		this.nombre=nombre;
 	}
 
-	public Direccion getDireccion()
-	{
-		return direccion;
-	}
-
-	public void setDireccion(Direccion direccion)
-	{
-		this.direccion=direccion;
-	}
-
 	public Ocupacion getOcupacion()
 	{
 		return ocupacion;
@@ -60,42 +64,16 @@ public class Persona
 	}
 
 	@Override
-	public String toString()
-	{
-		return "Persona [idPersona="+idPersona+", nombre="+nombre+", direccion="+direccion+", ocupacion="+ocupacion+"]";
-	}
-	
-	@Override
 	public boolean equals(Object o)
 	{
 		Persona other = (Persona)o;
-		boolean ok = true;
-		ok = ok && idPersona==other.getIdPersona();
-		ok = ok && nombre.equals(other.getNombre());
-
-		if( direccion!=null )
-		{
-			ok = ok && direccion.getIdDireccion()==other.getDireccion().getIdDireccion();
-		}
-		else
-		{
-			ok = ok && other.getDireccion()==null;
-		}
-		
-		if( ocupacion!=null )
-		{
-			ok = ok && ocupacion.getIdOcupacion()==other.getOcupacion().getIdOcupacion();
-		}
-		else
-		{
-			ok = ok && other.getOcupacion()==null;
-		}
-		
-		return ok;
+		return other.getIdPersona().equals(getIdPersona())
+				&& other.getNombre().equals(getNombre())
+				&& other.getOcupacion().equals(getOcupacion());
 	}
-	
-	
-	
 
-	
+	public String toString()
+	{
+		return getNombre();
+	}
 }
